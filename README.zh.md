@@ -6,7 +6,7 @@
 
 ## 下载
 
-到本仓库的 [Releases](https://gitcode.com/qq_57094995/deepseek-harness-desktop/releases) 页面即可下载：
+到本仓库的 [Releases](https://gitcode.com/dongdong_200ok/deepseek-harness-desktop/releases) 页面即可下载：
 
 | 文件 | 说明 |
 |---|---|
