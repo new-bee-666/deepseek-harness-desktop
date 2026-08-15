@@ -1,6 +1,7 @@
 # DeepSeek Harness 桌面版（Windows 客户端）
 
-这是 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 的 Windows 桌面客户端封装：用 Electron 把 Harness 的 Web UI 包成本地应用，内置运行环境，**安装即可用，无需单独安装 Node.js**。
+因dsh本身不支持客户端版，故本项目制作一款 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 的 Windows 桌面客户端：用 Electron 把 Harness 的 Web UI 包成本地应用，内置运行环境，
+**安装即可用，无需单独安装 Node.js**。
 
 > 底层 Harness 仍为官方 MIT 开源项目，本仓库在其基础上增加了桌面客户端封装（`apps/desktop/`）与打包流水线（`scripts/pack-desktop-client.mjs`）。
 
@@ -22,9 +23,8 @@
 
 ### 配置 API Key（必须）
 
-- 客户端本身不带模型密钥，首次使用需要配置 DeepSeek API Key。
+- 客户端本身不带模型密钥，首次使用需要配置 DeepSeek API Key或者可支持模型的Key。
 - 在设置页面填入，或手动编辑 `C:\Users\你的用户名\.dsh\.credentials.yaml`。
-- **API Key 只保存在你的用户目录，不会写入仓库、不会打包进 exe，也不会随程序分发。**
 
 ### 网络与端口
 
