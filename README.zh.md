@@ -1,12 +1,12 @@
 # DeepSeek Harness 桌面版（Windows 客户端）
 
-这是 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 的 Windows 桌面客户端封装：用 Electron 把 Harness 的 Web UI 包成本地应用，内置运行环境，**安装即可用，无需单独安装 Node.js**。
+因dsh本身不支持客户端版，故本项目制作一款 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 的 Windows 桌面客户端：用 Electron 把 Harness 的 Web UI 包成本地应用，内置运行环境，**安装即可用，无需单独安装 Node.js**。
 
 > 底层 Harness 仍为官方 MIT 开源项目，本仓库在其基础上增加了桌面客户端封装（`apps/desktop/`）与打包流水线（`scripts/pack-desktop-client.mjs`）。
 
 ## 下载
 
-到本仓库的 [Releases](https://gitcode.com/qq_57094995/deepseek-harness-desktop/releases) 页面下载：
+到本仓库的 [Releases](https://gitcode.com/qq_57094995/deepseek-harness-desktop/releases) 页面即可下载：
 
 | 文件 | 说明 |
 |---|---|
@@ -22,19 +22,17 @@
 
 ### 配置 API Key（必须）
 
-- 客户端本身不带模型密钥，首次使用需要配置 DeepSeek API Key。
+- 首次使用需要配置 DeepSeek API Key或者可支持模型的key。
 - 在设置页面填入，或手动编辑 `C:\Users\你的用户名\.dsh\.credentials.yaml`。
-- **API Key 只保存在你的用户目录，不会写入仓库、不会打包进 exe，也不会随程序分发。**
 
 ### 网络与端口
 
 - Web UI 默认运行在 `http://127.0.0.1:3080`，仅供本机访问。
 - 如 3080 端口被占用，客户端会自动复用或提示，请勿手动改端口导致连接失败。
 
-### 更换背景
+### 新添加个性化功能
 
 - 左下角有“更换背景”按钮，支持自定义本地图片作为对话背景。
-- 更换后背景只保存在本机，不随对话内容上传。
 
 ### 卸载/清理
 
