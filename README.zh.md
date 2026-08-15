@@ -1,74 +1,64 @@
-# DeepSeek Harness
+# DeepSeek Harness 桌面版（Windows 客户端）
 
-[English](README.md) | 中文
+这是 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 的 Windows 桌面客户端封装：用 Electron 把 Harness 的 Web UI 包成本地应用，内置运行环境，**安装即可用，无需单独安装 Node.js**。
 
-DeepSeek Harness（`dsh`）是由 [DeepSeek AI](https://deepseek.com) 开发的开源 agent harness（智能体框架）。
+> 底层 Harness 仍为官方 MIT 开源项目，本仓库在其基础上增加了桌面客户端封装（`apps/desktop/`）与打包流水线（`scripts/pack-desktop-client.mjs`）。
 
-它采用**一切皆插件**的架构，并由 [Cordis](https://github.com/cordiverse/cordis) 驱动，其设计参见论文 [_A Programming Paradigm for Spatiotemporal Composability_](https://github.com/cordiverse/paper)。
+## 下载
 
-## 开发者预览
+到本仓库的 [Releases](https://gitcode.com/qq_57094995/deepseek-harness-desktop/releases) 页面下载：
 
-DeepSeek Harness 目前处于 _开发者预览_ 阶段，正在快速迭代。**未来将出现破坏兼容性的变更。**
+| 文件 | 说明 |
+|---|---|
+| `DeepSeek Harness Setup 0.1.0-rc.5.exe` | 安装版：可选安装目录，创建桌面快捷方式 |
+| `DeepSeek Harness 0.1.0-rc.5.exe` | 便携版：免安装，双击即用 |
 
-## 运行
+## 使用注意事项
 
-### 通过 `npm` 运行
+### 首次启动
 
-安装 `Node.js`，然后运行：
+- 首次启动需要解压内置运行环境到 `%LOCALAPPDATA%\DeepSeek Harness\harness`，**首次启动约 30 秒**，之后启动约 4 秒，请耐心等待。
+- 请勿在首次启动过程中重复双击 exe，避免多个实例互相冲突。
 
-```sh
-npx @deepseek-ai/dsh web
-```
+### 配置 API Key（必须）
 
-该命令会启动 Web UI，默认地址为 `http://127.0.0.1:3080`。详见 [Web UI 指南](docs/user/guide/index.md)。
+- 客户端本身不带模型密钥，首次使用需要配置 DeepSeek API Key。
+- 在设置页面填入，或手动编辑 `C:\Users\你的用户名\.dsh\.credentials.yaml`。
+- **API Key 只保存在你的用户目录，不会写入仓库、不会打包进 exe，也不会随程序分发。**
 
-### 从源码运行
+### 网络与端口
 
-如需从仓库源码运行：
+- Web UI 默认运行在 `http://127.0.0.1:3080`，仅供本机访问。
+- 如 3080 端口被占用，客户端会自动复用或提示，请勿手动改端口导致连接失败。
 
-```sh
-git clone https://github.com/deepseek-ai/deepseek-harness.git
-cd deepseek-harness
-pnpm install
+### 更换背景
+
+- 左下角有“更换背景”按钮，支持自定义本地图片作为对话背景。
+- 更换后背景只保存在本机，不随对话内容上传。
+
+### 卸载/清理
+
+- 安装版：通过系统“添加或删除程序”卸载即可。
+- 便携版：删除 exe 后，如需彻底清理，删除 `%LOCALAPPDATA%\DeepSeek Harness` 目录。
+
+## 从源码构建
+
+环境要求：Windows、Node.js ≥ 22.19（建议 24.x）、pnpm。
+
+```powershell
+pnpm install --config.confirm-modules-purge=false
 pnpm run build
-pnpm dsh web
+node scripts/pack-desktop-client.mjs
 ```
 
-## 社区与支持
+产物输出到 `dist-exe\desktop\`。详细说明见 [apps/desktop](apps/desktop/package.json)。
 
-- 欢迎通过 [GitHub Discussions](https://github.com/deepseek-ai/deepseek-harness/discussions) 提交反馈或 bug 报告。
-- 为你的插件仓库添加 [`dsh-plugin`](https://github.com/topics/dsh-plugin) 话题，便于被发现。
-- 欢迎加入 DeepSeek Harness 企微群：扫码添加企微小助手并填写入群问卷，完成后小助手会邀请你入群。
+## 开源说明
 
-<table>
-  <thead>
-    <tr>
-      <th align="center">企微小助手</th>
-      <th align="center">入群问卷</th>
-      <th align="center">微信公众号</th>
-    </tr>
-  </thead>
-  <tbody>
-    <tr>
-      <td align="center"><img src="assets/community-wecom-assistant.png" alt="DeepSeek Harness 企微小助手二维码" width="180" height="180"></td>
-      <td align="center"><a href="https://trtgsjkv6r.feishu.cn/share/base/form/shrcnIt5twSVdLGD52KJBckGCgg"><img src="assets/community-wecom-survey.png" alt="DeepSeek Harness 入群问卷二维码" width="180" height="180"></a></td>
-      <td align="center"><img src="assets/community-wechat-official-account.png" alt="DeepSeek Harness 团队微信公众号二维码" width="180" height="180"></td>
-    </tr>
-  </tbody>
-</table>
+- 底层 Harness 源码版权归 DeepSeek AI，遵循 [MIT 许可证](LICENSE)。
+- 桌面客户端封装部分同样以 MIT 许可证开源。
+- 本仓库为个人定制版，与官方仓库无关，官方 CI 与质量门槛不适用于本仓库的桌面端改动。
 
-## 参与贡献
+## 反馈
 
-参见 [CONTRIBUTING.md](CONTRIBUTING.md)。
-
-## 开发
-
-请先阅读[开发指南](docs/development.md)与[架构文档](docs/architecture.md)。
-
-面向 agent：请遵循 [AGENTS.md](AGENTS.md)。
-
-## 许可证
-
-[MIT](LICENSE)
-
-第三方依赖及其许可证见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
+问题或建议请在本仓库提交 Issue。
