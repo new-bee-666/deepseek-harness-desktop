@@ -19,6 +19,9 @@ packages:
   # Deploy root of the single-exe build: a pure dependency manifest whose
   # closure is what the exe bundles and what the Python runtime distributes.
   - python/sdk-runtime
+  # Deploy root of the desktop client: same pattern as python/sdk-runtime, but
+  # for the dsh web profile closure the Electron app bundles.
+  - apps/desktop/deploy
 
 # Vendored framework packages keep their upstream semver ranges, while local
 # builds must resolve those matching names to this workspace's pinned sources.
@@ -27,6 +30,10 @@ linkWorkspacePackages: true
 overrides:
   '@deepseek-ai/cosmokit': 'link:vendor/cosmokit'
   '@deepseek-ai/schemastery': 'link:vendor/schemastery'
+  # electron-builder 26.15.3 reads ElectronDownloadCacheMode from @electron/get;
+  # the enum only exists in 3.1.0+, while the declared ^3.0.0 range would settle
+  # on the enum-less 3.0.0.
+  '@electron/get': '^3.1.0'
 
 peerDependencyRules:
   allowedVersions:
@@ -40,6 +47,10 @@ peerDependencyRules:
 allowBuilds:
   esbuild: true
   lefthook: true
+  # Desktop client packaging: Electron downloads its runtime in postinstall, and
+  # electron-winstaller ships a Windows helper binary with its install script.
+  electron: true
+  electron-winstaller: true
   # Cross-platform boundary for the persistent PTY backend, including ConPTY on Windows.
   node-pty: true
   # Pulled in by @earendil-works/pi-ai (optional LLM API backend). pnpm lists

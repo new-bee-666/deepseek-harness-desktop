@@ -1,0 +1,61 @@
+{
+  "name": "@deepseek-ai/dsh-desktop",
+  "description": "Windows desktop client for DeepSeek Harness: an Electron shell that boots the dsh web profile from the bundled harness closure.",
+  "version": "0.1.0-rc.5",
+  "private": true,
+  "type": "module",
+  "main": "main.js",
+  "productName": "DeepSeek Harness",
+  "author": "DeepSeek",
+  "scripts": {
+    "pack": "node ../../scripts/pack-desktop-client.mjs",
+    "start": "electron ."
+  },
+  "devDependencies": {
+    "electron": "^37.2.0",
+    "electron-builder": "^26.0.12"
+  },
+  "build": {
+    "appId": "ai.deepseek.harness.desktop",
+    "productName": "DeepSeek Harness",
+    "npmRebuild": false,
+    "directories": {
+      "output": "../../dist-exe/desktop"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "package.json",
+      "build/icon.ico"
+    ],
+    "extraResources": [
+      {
+        "from": "../../dist-exe/staging/harness.tar",
+        "to": "harness.tar"
+      }
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "shortcutName": "DeepSeek Harness"
+    }
+  }
+}

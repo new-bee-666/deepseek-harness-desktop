@@ -1,0 +1,33 @@
+{
+  "name": "dsh-desktop-client-deploy",
+  "description": "Dependency-only deploy root defining the desktop client's harness closure; pnpm deploy materializes this manifest and node_modules.",
+  "version": "0.1.0-rc.5",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@cfworker/json-schema": "^4.1.1",
+    "@deepseek-ai/cordis-plugin-group": "workspace:^",
+    "@deepseek-ai/cosmokit": "workspace:^",
+    "@deepseek-ai/dsh": "workspace:^",
+    "@deepseek-ai/dsh-anonymous-user-id": "workspace:^",
+    "@deepseek-ai/dsh-atomic-write": "workspace:^",
+    "@deepseek-ai/dsh-bash-local": "workspace:^",
+    "@deepseek-ai/dsh-code-runtime": "workspace:^",
+    "@deepseek-ai/dsh-compaction": "workspace:^",
+    "@deepseek-ai/dsh-fs": "workspace:^",
+    "@deepseek-ai/dsh-invariants": "workspace:^",
+    "@deepseek-ai/dsh-output-retention": "workspace:^",
+    "@deepseek-ai/dsh-sandbox": "workspace:^",
+    "@deepseek-ai/dsh-scope": "workspace:^",
+    "@deepseek-ai/dsh-session-telemetry": "workspace:^",
+    "@deepseek-ai/dsh-session-title-llm": "workspace:^",
+    "@deepseek-ai/dsh-shell": "workspace:^",
+    "@deepseek-ai/dsh-spill": "workspace:^",
+    "@deepseek-ai/dsh-subagent-in-process-driver": "workspace:^",
+    "@deepseek-ai/dsh-subprocess": "workspace:^",
+    "@deepseek-ai/dsh-timeout": "workspace:^",
+    "@deepseek-ai/dsh-workflow": "workspace:^",
+    "@deepseek-ai/schemastery": "workspace:^",
+    "@mistralai/mistralai": "^2.2.6"
+  }
+}
