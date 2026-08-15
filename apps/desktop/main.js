@@ -21,6 +21,7 @@ import {
   writeFileSync,
 } from 'node:fs'
 import { dirname, extname, join } from 'node:path'
+import { homedir } from 'node:os'
 import { fileURLToPath } from 'node:url'
 
 const moduleDir = dirname(fileURLToPath(import.meta.url))
@@ -29,6 +30,8 @@ const SERVER_URL = `http://127.0.0.1:${PORT}`
 const SERVER_WAIT_MS = 90_000
 const MAX_LOG_TAIL = 200_000
 const BOUNDS_FILE = 'window-state.json'
+const DEEPSEEK_BALANCE_URL = 'https://api.deepseek.com/user/balance'
+const BALANCE_REFRESH_MS = 60_000
 
 // The wallpaper is served through a custom scheme: the web UI runs on an http
 // origin, and Chromium blocks `file://` subresources from http pages.
@@ -233,6 +236,51 @@ async function clearWallpaper() {
   await applyWallpaper()
 }
 
+// ---- API balance (real-time) ----
+
+/**
+ * Read the DeepSeek API key from the same credential file the harness uses
+ * ($DSH_HOME/.credentials.yaml, defaulting to ~/.dsh), so the balance shown
+ * always matches the key the client actually calls with.
+ */
+function readDeepSeekApiKey() {
+  const home = process.env.DSH_HOME ?? join(homedir(), '.dsh')
+  const file = join(home, '.credentials.yaml')
+  try {
+    const text = readFileSync(file, 'utf8')
+    for (const line of text.split(/\r?\n/)) {
+      const match = /^\s*DEEPSEEK_API_KEY\s*:\s*(.+?)\s*$/.exec(line)
+      if (match) {
+        const value = match[1].replace(/^["']|["']$/g, '')
+        return value.length > 0 ? value : undefined
+      }
+    }
+  } catch {
+    // No credential file yet: report as unconfigured.
+  }
+  return undefined
+}
+
+async function fetchApiBalance() {
+  const apiKey = readDeepSeekApiKey()
+  if (apiKey === undefined) {
+    return { ok: false, reason: 'no-key' }
+  }
+  try {
+    const response = await fetch(DEEPSEEK_BALANCE_URL, {
+      headers: { Authorization: `Bearer ${apiKey}` },
+      signal: AbortSignal.timeout(15_000),
+    })
+    if (!response.ok) {
+      return { ok: false, reason: 'http', status: response.status }
+    }
+    const data = await response.json()
+    return { ok: true, data }
+  } catch (error) {
+    return { ok: false, reason: 'network', message: error?.message ?? String(error) }
+  }
+}
+
 function injectWallpaperButton() {
   if (mainWindow === null || mainWindow.isDestroyed()) return
   const script = `(() => {
@@ -263,6 +311,63 @@ function injectWallpaperButton() {
     })
     btn.addEventListener('click', () => { void window.dshDesktop.changeBackground() })
     document.body.appendChild(btn)
+  })()`
+  mainWindow.webContents.executeJavaScript(script).catch(() => {})
+}
+
+function injectBalanceButton() {
+  if (mainWindow === null || mainWindow.isDestroyed()) return
+  const script = `(() => {
+    if (document.getElementById('dsh-balance-btn')) return
+    if (!window.dshDesktop) return
+    const btn = document.createElement('button')
+    btn.id = 'dsh-balance-btn'
+    btn.type = 'button'
+    btn.innerHTML = '<span style="font-size:14px;line-height:1">💳</span><span id="dsh-balance-label">余额：查询中…</span>'
+    btn.title = '点击刷新 API 余额'
+    Object.assign(btn.style, {
+      position: 'fixed', left: '16px', bottom: '132px', zIndex: '2147483000',
+      display: 'inline-flex', alignItems: 'center', gap: '8px',
+      padding: '10px 16px', borderRadius: '999px', border: '1px solid rgba(255,255,255,0.14)',
+      cursor: 'pointer', background: 'rgba(18,22,36,0.78)', color: '#e8eaf2',
+      fontSize: '13px', fontFamily: 'inherit', boxShadow: '0 4px 16px rgba(0,0,0,0.35)',
+      backdropFilter: 'blur(10px)', transition: 'transform .15s ease, background .15s ease, box-shadow .15s ease',
+    })
+    btn.addEventListener('mouseenter', () => {
+      btn.style.transform = 'translateY(-2px)'
+      btn.style.background = 'rgba(30,36,58,0.9)'
+      btn.style.boxShadow = '0 6px 20px rgba(0,0,0,0.45)'
+    })
+    btn.addEventListener('mouseleave', () => {
+      btn.style.transform = 'translateY(0)'
+      btn.style.background = 'rgba(18,22,36,0.78)'
+      btn.style.boxShadow = '0 4px 16px rgba(0,0,0,0.35)'
+    })
+    const label = () => document.getElementById('dsh-balance-label')
+    async function refresh() {
+      const el = label()
+      if (el) el.textContent = '余额：查询中…'
+      const result = await window.dshDesktop.getBalance()
+      const current = label()
+      if (!current) return
+      if (!result.ok) {
+        current.textContent = result.reason === 'no-key'
+          ? '余额：未配置 API Key'
+          : result.reason === 'http'
+            ? '余额：获取失败 (' + result.status + ')'
+            : '余额：网络错误'
+        return
+      }
+      const info = Array.isArray(result.data?.balance_infos) ? result.data.balance_infos[0] : undefined
+      const currency = info?.currency ?? 'CNY'
+      const total = info?.total_balance ?? '0.00'
+      const available = result.data?.is_available === false ? '（不可用）' : ''
+      current.textContent = '余额：' + total + ' ' + currency + available
+    }
+    btn.addEventListener('click', () => { void refresh() })
+    document.body.appendChild(btn)
+    void refresh()
+    setInterval(() => { void refresh() }, ${BALANCE_REFRESH_MS})
   })()`
   mainWindow.webContents.executeJavaScript(script).catch(() => {})
 }
@@ -482,6 +587,7 @@ async function createMainWindow() {
   mainWindow.webContents.on('did-finish-load', () => {
     void applyWallpaper()
     injectWallpaperButton()
+    injectBalanceButton()
   })
   await mainWindow.loadURL(SERVER_URL)
   showMain()
@@ -525,6 +631,7 @@ if (!gotLock) {
   app.setAppUserModelId('ai.deepseek.harness.desktop')
   ipcMain.handle('desktop:change-background', () => changeWallpaper())
   ipcMain.handle('desktop:clear-background', () => clearWallpaper())
+  ipcMain.handle('desktop:get-balance', () => fetchApiBalance())
   app.on('second-instance', () => {
     if (mainWindow !== null) {
       if (mainWindow.isMinimized()) mainWindow.restore()
