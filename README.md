@@ -11,8 +11,8 @@
 
 | 文件 | 说明 |
 |---|---|
-| `DeepSeek Harness Setup 0.2.0-rc.5.exe` | 安装版：可选安装目录，创建桌面快捷方式 |
-| `DeepSeek Harness 0.2.0-rc.5.exe` | 便携版：免安装，双击即用 |
+| `DeepSeek Harness Setup 0.3.0.exe` | 安装版：可选安装目录，创建桌面快捷方式 |
+| `DeepSeek Harness 0.3.0.exe` | 便携版：免安装，双击即用 |
 
 ## 使用注意事项
 
