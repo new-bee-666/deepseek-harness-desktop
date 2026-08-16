@@ -1,7 +1,7 @@
 {
   "name": "@deepseek-ai/dsh-desktop",
   "description": "Windows desktop client for DeepSeek Harness: an Electron shell that boots the dsh web profile from the bundled harness closure.",
-  "version": "0.1.0-rc.5",
+  "version": "0.3.0",
   "private": true,
   "type": "module",
   "main": "main.js",

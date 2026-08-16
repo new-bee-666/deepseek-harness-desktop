@@ -8,7 +8,7 @@ import { join, resolve, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
-const PORTABLE = join(ROOT, 'dist-exe', 'desktop', 'DeepSeek Harness 0.1.0-rc.5.exe')
+const PORTABLE = join(ROOT, 'dist-exe', 'desktop', 'DeepSeek Harness 0.3.0.exe')
 const DEBUG_PORT = 9224
 
 if (!existsSync(PORTABLE)) {
@@ -16,7 +16,7 @@ if (!existsSync(PORTABLE)) {
   process.exit(1)
 }
 
-for (const name of ['DeepSeek Harness 0.1.0-rc.5', 'DeepSeek Harness']) {
+for (const name of ['DeepSeek Harness 0.3.0', 'DeepSeek Harness']) {
   spawnSync('taskkill.exe', ['/IM', `${name}.exe`, '/T', '/F'], { stdio: 'ignore' })
 }
 
@@ -79,5 +79,5 @@ try {
 }
 console.log(`wallpaper_feature=${wallpaper}`)
 
-spawnSync('taskkill.exe', ['/IM', 'DeepSeek Harness 0.1.0-rc.5.exe', '/T', '/F'], { stdio: 'ignore' })
+spawnSync('taskkill.exe', ['/IM', 'DeepSeek Harness 0.3.0.exe', '/T', '/F'], { stdio: 'ignore' })
 spawnSync('taskkill.exe', ['/IM', 'DeepSeek Harness.exe', '/T', '/F'], { stdio: 'ignore' })

@@ -8,7 +8,7 @@ import { join, resolve, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
-const SETUP = join(ROOT, 'dist-exe', 'desktop', 'DeepSeek Harness Setup 0.1.0-rc.5.exe')
+const SETUP = join(ROOT, 'dist-exe', 'desktop', 'DeepSeek Harness Setup 0.3.0.exe')
 const INSTALL_DIR = join(process.env.TEMP, 'dsh-install-test')
 const DEBUG_PORT = 9225
 
@@ -17,7 +17,7 @@ if (!existsSync(SETUP)) {
   process.exit(1)
 }
 
-for (const name of ['DeepSeek Harness 0.1.0-rc.5', 'DeepSeek Harness']) {
+for (const name of ['DeepSeek Harness 0.3.0', 'DeepSeek Harness']) {
   spawnSync('taskkill.exe', ['/IM', `${name}.exe`, '/T', '/F'], { stdio: 'ignore' })
 }
 rmSync(INSTALL_DIR, { recursive: true, force: true })

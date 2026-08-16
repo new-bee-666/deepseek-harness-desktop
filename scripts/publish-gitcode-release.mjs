@@ -2,7 +2,7 @@
 /**
  * Publish the desktop client to GitCode in one command:
  *   1. (optional) push the current `master` branch to the GitCode remote.
- *   2. Replace the two exe assets on the v0.1.0-rc.5 release.
+ *   2. Replace the two exe assets on the v0.3.0 release.
  *
  * Token resolution order: $GITCODE_TOKEN -> Windows/macOS credential manager
  * (via `git credential fill` for host=gitcode.com) -> error. The token is
@@ -27,14 +27,14 @@ const { values } = parseArgs({
     remote: { type: 'string', default: 'gitcode' },
     owner: { type: 'string', default: 'dongdong_200ok' },
     repo: { type: 'string', default: 'deepseek-harness-desktop' },
-    tag: { type: 'string', default: 'v0.1.0-rc.5' },
+    tag: { type: 'string', default: 'v0.3.0' },
     'exe-dir': { type: 'string', default: join(ROOT, 'dist-exe', 'desktop') },
   },
 })
 
 const ASSETS = [
-  'DeepSeek Harness 0.1.0-rc.5.exe',
-  'DeepSeek Harness Setup 0.1.0-rc.5.exe',
+  'DeepSeek Harness 0.3.0.exe',
+  'DeepSeek Harness Setup 0.3.0.exe',
 ]
 
 function getToken() {
@@ -71,6 +71,29 @@ async function getUploadUrl(token, fileName) {
     throw new Error(`get upload_url failed (HTTP ${response.status}): ${await response.text()}`)
   }
   return response.json()
+}
+
+async function listAttachments(token) {
+  const url = apiUrl(
+    `/repos/${values.owner}/${values.repo}/releases/${values.tag}/attach_files`
+    + `?access_token=${encodeURIComponent(token)}`,
+  )
+  const response = await fetch(url)
+  if (!response.ok) {
+    throw new Error(`list attachments failed (HTTP ${response.status}): ${await response.text()}`)
+  }
+  return response.json()
+}
+
+async function deleteAttachment(token, id) {
+  const url = apiUrl(
+    `/repos/${values.owner}/${values.repo}/releases/${values.tag}/attach_files/${id}`
+    + `?access_token=${encodeURIComponent(token)}`,
+  )
+  const response = await fetch(url, { method: 'DELETE' })
+  if (!response.ok && response.status !== 204) {
+    throw new Error(`delete attachment ${id} failed (HTTP ${response.status}): ${await response.text()}`)
+  }
 }
 
 async function uploadAsset(token, fileName) {
@@ -123,7 +146,14 @@ async function main() {
     )
   }
   if (values.push) pushCode()
+  const attachments = await listAttachments(token)
+  const byName = new Map((attachments ?? []).map((item) => [item.name, item.id]))
   for (const fileName of ASSETS) {
+    const existingId = byName.get(fileName)
+    if (existingId != null) {
+      console.log(`removing stale asset ${fileName} (id=${existingId})...`)
+      await deleteAttachment(token, existingId)
+    }
     await uploadAsset(token, fileName)
   }
   console.log(

@@ -1,7 +1,7 @@
 {
   "name": "dsh-desktop-client-deploy",
   "description": "Dependency-only deploy root defining the desktop client's harness closure; pnpm deploy materializes this manifest and node_modules.",
-  "version": "0.1.0-rc.5",
+  "version": "0.3.0",
   "private": true,
   "type": "module",
   "dependencies": {

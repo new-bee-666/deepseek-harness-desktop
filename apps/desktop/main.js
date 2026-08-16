@@ -271,29 +271,50 @@ const BALANCE_PROVIDERS = [
     },
   },
   {
-    id: 'siliconflow',
-    label: '硅基流动',
-    key: 'SILICONFLOW_API_KEY',
-    url: 'https://api.siliconflow.cn/v1/user/info',
+    id: 'openai',
+    label: 'OpenAI',
+    key: 'OPENAI_API_KEY',
+    url: 'https://api.openai.com/v1/dashboard/billing/credit_grants',
     normalize(data) {
+      const available = Number(data?.total_available ?? 0)
       return {
-        balance: String(data?.data?.totalBalance ?? '0'),
-        currency: 'CNY',
+        balance: available.toFixed(2),
+        currency: 'USD',
+        note: data?.total_used != null ? `已用 $${Number(data.total_used).toFixed(2)}` : undefined,
       }
     },
   },
   {
-    id: 'openrouter',
-    label: 'OpenRouter',
-    key: 'OPENROUTER_API_KEY',
-    url: 'https://openrouter.ai/api/v1/key',
+    id: 'claude',
+    label: 'Claude',
+    key: 'ANTHROPIC_ADMIN_KEY',
+    url: 'https://api.anthropic.com/v1/organizations/usage_report/messages',
+    auth: 'x-api-key',
+    headers: { 'anthropic-version': '2023-06-01' },
+    validateKey(apiKey) {
+      return apiKey.startsWith('sk-ant-admin') ? undefined : 'no-admin'
+    },
     normalize(data) {
-      const usage = Number(data?.data?.usage ?? 0)
-      const limit = data?.data?.limit == null ? undefined : Number(data.data.limit)
+      let inputTokens = 0
+      let outputTokens = 0
+      for (const day of data?.data ?? []) {
+        for (const result of day.results ?? []) {
+          for (const usage of Object.values(result.usage ?? {})) {
+            inputTokens += Number(usage?.input_tokens ?? 0)
+            outputTokens += Number(usage?.output_tokens ?? 0)
+          }
+        }
+      }
+      const total = inputTokens + outputTokens
+      const text = total >= 1_000_000
+        ? `${(total / 1_000_000).toFixed(1)}M`
+        : total >= 1_000
+          ? `${(total / 1_000).toFixed(1)}K`
+          : String(total)
       return {
-        balance: limit == null ? String(usage) : String(Math.max(0, limit - usage)),
-        currency: 'USD',
-        note: limit == null ? `已用 $${usage.toFixed(2)}` : undefined,
+        balance: text,
+        currency: 'tokens',
+        note: '本月用量（非余额）',
       }
     },
   },
@@ -324,11 +345,17 @@ function readCredentialValues() {
 }
 
 async function fetchProviderBalance(provider, apiKey) {
-  try {
-    const response = await fetch(provider.url, {
-      headers: { Authorization: `Bearer ${apiKey}` },
-      signal: AbortSignal.timeout(15_000),
-    })
+    try {
+      const headers = { ...(provider.headers ?? {}) }
+      if (provider.auth === 'x-api-key') {
+        headers['x-api-key'] = apiKey
+      } else {
+        headers.Authorization = `Bearer ${apiKey}`
+      }
+      const response = await fetch(provider.url, {
+        headers,
+        signal: AbortSignal.timeout(15_000),
+      })
     if (!response.ok) {
       return { id: provider.id, label: provider.label, ok: false, reason: 'http', status: response.status }
     }
@@ -350,6 +377,10 @@ async function fetchApiBalance() {
     const apiKey = values.get(provider.key)
     if (apiKey === undefined) {
       return Promise.resolve({ id: provider.id, label: provider.label, ok: false, reason: 'no-key' })
+    }
+    const validation = provider.validateKey?.(apiKey)
+    if (validation !== undefined) {
+      return Promise.resolve({ id: provider.id, label: provider.label, ok: false, reason: validation })
     }
     return fetchProviderBalance(provider, apiKey)
   }))
@@ -501,20 +532,11 @@ function injectBalanceButton() {
       name.textContent = provider.label
       name.style.cssText = 'min-width:84px;color:#c7cede'
       const value = document.createElement('div')
-      if (provider.ok) {
-        value.textContent = provider.balance + ' ' + provider.currency
-        value.style.color = '#7c93ff'
-        if (provider.note) {
-          value.title = provider.note
-        }
-      } else if (provider.reason === 'no-key') {
-        value.textContent = '未配置'
-        value.style.color = '#7c869f'
-      } else {
-        value.textContent = '获取失败'
-        value.style.color = '#e07070'
+      value.textContent = provider.balance + ' ' + provider.currency
+      if (provider.note) {
+        value.title = provider.note
       }
-      value.style.cssText = 'text-align:right;font-weight:600;flex:1'
+      value.style.cssText = 'text-align:right;font-weight:600;flex:1;color:#7c93ff'
       const row = document.createElement('div')
       row.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:10px'
       row.appendChild(name)
@@ -529,7 +551,14 @@ function injectBalanceButton() {
         return
       }
       list.textContent = ''
-      for (const provider of result) list.appendChild(rowHtml(provider))
+      const visible = result.filter((provider) => provider.ok)
+      if (visible.length === 0) {
+        const empty = document.createElement('div')
+        empty.textContent = '暂无可用余额信息'
+        empty.style.color = '#7c869f'
+        list.appendChild(empty)
+      }
+      for (const provider of visible) list.appendChild(rowHtml(provider))
       footer.textContent = '更新于 ' + new Date().toLocaleTimeString()
     }
     btn.addEventListener('click', toggle)
