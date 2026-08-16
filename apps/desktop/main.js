@@ -7,7 +7,7 @@
  * turns startup failures into actionable dialogs with the harness log.
  */
 
-import { app, BrowserWindow, dialog, ipcMain, Menu, protocol, shell } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, Menu, protocol, shell, Tray } from 'electron'
 import { execFile, spawn, spawnSync } from 'node:child_process'
 import { readFile } from 'node:fs/promises'
 import {
@@ -46,6 +46,7 @@ let mainWindow = null
 let harnessProcess = null
 let harnessLog = ''
 let isQuitting = false
+let tray = null
 
 function logDir() {
   const dir = app.getPath('userData')
@@ -743,6 +744,28 @@ function buildMenu() {
   Menu.setApplicationMenu(Menu.buildFromTemplate(template))
 }
 
+function showMainWindow() {
+  if (mainWindow === null || mainWindow.isDestroyed()) return
+  if (mainWindow.isMinimized()) mainWindow.restore()
+  mainWindow.show()
+  mainWindow.focus()
+}
+
+function createTray() {
+  if (tray !== null) return
+  const icon = join(moduleDir, 'build', 'icon.ico')
+  if (!existsSync(icon)) return
+  tray = new Tray(icon)
+  tray.setToolTip('DeepSeek Harness')
+  tray.setContextMenu(Menu.buildFromTemplate([
+    { label: '显示主窗口', click: () => showMainWindow() },
+    { type: 'separator' },
+    { label: '退出', click: () => app.quit() },
+  ]))
+  tray.on('click', () => showMainWindow())
+  tray.on('double-click', () => showMainWindow())
+}
+
 function startHarness() {
   const dir = harnessDir()
   const entry = join(dir, 'node_modules', '@deepseek-ai', 'dsh', 'lib', 'bin.js')
@@ -869,7 +892,7 @@ async function createMainWindow() {
   mainWindow.on('close', (event) => {
     if (!isQuitting) {
       event.preventDefault()
-      mainWindow?.minimize()
+      mainWindow?.hide()
     }
   })
   await mainWindow.loadURL(SERVER_URL)
@@ -917,10 +940,7 @@ if (!gotLock) {
   ipcMain.handle('desktop:get-balance', () => fetchApiBalance())
   ipcMain.handle('desktop:open-workspace-folder', (_event, workspaceTitle) => openWorkspaceFolder(workspaceTitle))
   app.on('second-instance', () => {
-    if (mainWindow !== null) {
-      if (mainWindow.isMinimized()) mainWindow.restore()
-      mainWindow.focus()
-    }
+    showMainWindow()
   })
 
   app.whenReady().then(async () => {
@@ -946,6 +966,7 @@ if (!gotLock) {
     })
     createSplashWindow()
     buildMenu()
+    createTray()
     try {
       // A leftover harness from a previous run may already be listening; reuse
       // it instead of erroring, then open the window against the same server.
