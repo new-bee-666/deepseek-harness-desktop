@@ -79,10 +79,32 @@ async function listAttachments(token) {
     + `?access_token=${encodeURIComponent(token)}`,
   )
   const response = await fetch(url)
+  if (response.status === 404) {
+    return undefined
+  }
   if (!response.ok) {
     throw new Error(`list attachments failed (HTTP ${response.status}): ${await response.text()}`)
   }
   return response.json()
+}
+
+async function ensureRelease(token) {
+  const url = apiUrl(`/repos/${values.owner}/${values.repo}/releases`)
+    + `?access_token=${encodeURIComponent(token)}`
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      tag_name: values.tag,
+      name: `DeepSeek Harness Desktop ${values.tag}`,
+      body: `DeepSeek Harness 桌面客户端 ${values.tag}\n\n- 便携版：直接解压运行\n- 安装版：安装到系统`,
+      target_commitish: 'master',
+      prerelease: false,
+    }),
+  })
+  if (!response.ok && response.status !== 201) {
+    throw new Error(`create release failed (HTTP ${response.status}): ${await response.text()}`)
+  }
 }
 
 async function deleteAttachment(token, id) {
@@ -146,7 +168,12 @@ async function main() {
     )
   }
   if (values.push) pushCode()
-  const attachments = await listAttachments(token)
+  let attachments = await listAttachments(token)
+  if (attachments === undefined) {
+    console.log(`release ${values.tag} not found, creating it...`)
+    await ensureRelease(token)
+    attachments = await listAttachments(token) ?? []
+  }
   const byName = new Map((attachments ?? []).map((item) => [item.name, item.id]))
   for (const fileName of ASSETS) {
     const existingId = byName.get(fileName)
