@@ -28,6 +28,6 @@
     "@deepseek-ai/dsh-timeout": "workspace:^",
     "@deepseek-ai/dsh-workflow": "workspace:^",
     "@deepseek-ai/schemastery": "workspace:^",
-    "@mistralai/mistralai": "^2.2.6"
+    "@mistralai/mistralai": "^2.4.1"
   }
 }
