@@ -30,7 +30,6 @@ const SERVER_URL = `http://127.0.0.1:${PORT}`
 const SERVER_WAIT_MS = 90_000
 const MAX_LOG_TAIL = 200_000
 const BOUNDS_FILE = 'window-state.json'
-const DEEPSEEK_BALANCE_URL = 'https://api.deepseek.com/user/balance'
 const BALANCE_REFRESH_MS = 60_000
 
 // The wallpaper is served through a custom scheme: the web UI runs on an http
@@ -236,61 +235,217 @@ async function clearWallpaper() {
   await applyWallpaper()
 }
 
-// ---- API balance (real-time) ----
+// ---- Multi-provider API balance (real-time) ----
 
 /**
- * Read the DeepSeek API key from the same credential file the harness uses
- * ($DSH_HOME/.credentials.yaml, defaulting to ~/.dsh), so the balance shown
- * always matches the key the client actually calls with.
+ * Balance query contract per provider: which credential key to read, which
+ * endpoint answers, and how to normalize the response into a displayable
+ * { balance, currency, note } triple. Only providers with a documented
+ * public balance endpoint are listed; console-only providers are omitted.
  */
-function readDeepSeekApiKey() {
+const BALANCE_PROVIDERS = [
+  {
+    id: 'deepseek',
+    label: 'DeepSeek',
+    key: 'DEEPSEEK_API_KEY',
+    url: 'https://api.deepseek.com/user/balance',
+    normalize(data) {
+      const info = Array.isArray(data?.balance_infos) ? data.balance_infos[0] : undefined
+      return {
+        balance: info?.total_balance ?? '0.00',
+        currency: info?.currency ?? 'CNY',
+        note: data?.is_available === false ? '不可用' : undefined,
+      }
+    },
+  },
+  {
+    id: 'kimi',
+    label: 'Kimi',
+    key: 'MOONSHOT_API_KEY',
+    url: 'https://api.moonshot.cn/v1/users/me/balance',
+    normalize(data) {
+      return {
+        balance: String(data?.data?.available_balance ?? '0'),
+        currency: 'CNY',
+      }
+    },
+  },
+  {
+    id: 'siliconflow',
+    label: '硅基流动',
+    key: 'SILICONFLOW_API_KEY',
+    url: 'https://api.siliconflow.cn/v1/user/info',
+    normalize(data) {
+      return {
+        balance: String(data?.data?.totalBalance ?? '0'),
+        currency: 'CNY',
+      }
+    },
+  },
+  {
+    id: 'openrouter',
+    label: 'OpenRouter',
+    key: 'OPENROUTER_API_KEY',
+    url: 'https://openrouter.ai/api/v1/key',
+    normalize(data) {
+      const usage = Number(data?.data?.usage ?? 0)
+      const limit = data?.data?.limit == null ? undefined : Number(data.data.limit)
+      return {
+        balance: limit == null ? String(usage) : String(Math.max(0, limit - usage)),
+        currency: 'USD',
+        note: limit == null ? `已用 $${usage.toFixed(2)}` : undefined,
+      }
+    },
+  },
+]
+
+/**
+ * Read all credential values the providers care about from the same file the
+ * harness uses ($DSH_HOME/.credentials.yaml, defaulting to ~/.dsh), so the
+ * balance shown always matches the keys the client actually calls with.
+ */
+function readCredentialValues() {
   const home = process.env.DSH_HOME ?? join(homedir(), '.dsh')
   const file = join(home, '.credentials.yaml')
+  const values = new Map()
   try {
     const text = readFileSync(file, 'utf8')
     for (const line of text.split(/\r?\n/)) {
-      const match = /^\s*DEEPSEEK_API_KEY\s*:\s*(.+?)\s*$/.exec(line)
+      const match = /^\s*([A-Za-z0-9_.-]+)\s*:\s*(.+?)\s*$/.exec(line)
       if (match) {
-        const value = match[1].replace(/^["']|["']$/g, '')
-        return value.length > 0 ? value : undefined
+        const value = match[2].replace(/^["']|["']$/g, '')
+        if (value.length > 0) values.set(match[1], value)
       }
     }
   } catch {
-    // No credential file yet: report as unconfigured.
+    // No credential file yet: every provider reports as unconfigured.
   }
-  return undefined
+  return values
 }
 
-async function fetchApiBalance() {
-  const apiKey = readDeepSeekApiKey()
-  if (apiKey === undefined) {
-    return { ok: false, reason: 'no-key' }
-  }
+async function fetchProviderBalance(provider, apiKey) {
   try {
-    const response = await fetch(DEEPSEEK_BALANCE_URL, {
+    const response = await fetch(provider.url, {
       headers: { Authorization: `Bearer ${apiKey}` },
       signal: AbortSignal.timeout(15_000),
     })
     if (!response.ok) {
-      return { ok: false, reason: 'http', status: response.status }
+      return { id: provider.id, label: provider.label, ok: false, reason: 'http', status: response.status }
     }
     const data = await response.json()
-    return { ok: true, data }
+    return {
+      id: provider.id,
+      label: provider.label,
+      ok: true,
+      ...provider.normalize(data),
+    }
   } catch (error) {
-    return { ok: false, reason: 'network', message: error?.message ?? String(error) }
+    return { id: provider.id, label: provider.label, ok: false, reason: 'network' }
   }
 }
 
-function injectWallpaperButton() {
+async function fetchApiBalance() {
+  const values = readCredentialValues()
+  return Promise.all(BALANCE_PROVIDERS.map((provider) => {
+    const apiKey = values.get(provider.key)
+    if (apiKey === undefined) {
+      return Promise.resolve({ id: provider.id, label: provider.label, ok: false, reason: 'no-key' })
+    }
+    return fetchProviderBalance(provider, apiKey)
+  }))
+}
+
+/**
+ * Inject the wallpaper entry into the settings panel's General section. The
+ * panel is a React modal that remounts its content per open and per section
+ * switch, so a MutationObserver re-applies the row whenever the General
+ * section is visible and the row is not already present.
+ */
+function injectSettingsWallpaperEntry() {
   if (mainWindow === null || mainWindow.isDestroyed()) return
   const script = `(() => {
-    if (document.getElementById('dsh-wallpaper-btn')) return
+    if (window.__dshWallpaperObserver) return
+    if (!window.dshDesktop) return
+    const ROW_ID = 'dsh-settings-wallpaper-row'
+    function isGeneralActive(dialog) {
+      const active = dialog.querySelector('nav button[aria-current="true"]')
+      if (active) return /通用|General/i.test(active.textContent ?? '')
+      const first = dialog.querySelector('nav button')
+      return first !== null
+    }
+    function sectionContainer(dialog) {
+      const options = dialog.querySelector('.options') ?? dialog.querySelector('[class*="options"]')
+      if (!options) return undefined
+      return options.firstElementChild ?? options
+    }
+    function makeRow() {
+      const row = document.createElement('div')
+      row.id = ROW_ID
+      Object.assign(row.style, {
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        gap: '12px', padding: '14px 0', borderBottom: '1px solid var(--dsw-alias-border-l2, rgba(255,255,255,0.08))',
+        fontFamily: 'inherit',
+      })
+      const label = document.createElement('div')
+      label.textContent = '更换背景'
+      Object.assign(label.style, {
+        fontSize: '14px', lineHeight: '22px', color: 'var(--dsw-alias-label-primary, #e8eaf2)',
+      })
+      const actions = document.createElement('div')
+      actions.style.cssText = 'display:flex;gap:8px'
+      const change = document.createElement('button')
+      change.type = 'button'
+      change.textContent = '选择图片…'
+      change.addEventListener('click', () => { void window.dshDesktop.changeBackground() })
+      const clear = document.createElement('button')
+      clear.type = 'button'
+      clear.textContent = '清除背景'
+      clear.addEventListener('click', () => { void window.dshDesktop.clearBackground() })
+      for (const btn of [change, clear]) {
+        Object.assign(btn.style, {
+          padding: '6px 14px', borderRadius: '10px', cursor: 'pointer',
+          border: '1px solid var(--dsw-alias-border-l2, rgba(255,255,255,0.14))',
+          background: 'transparent', color: 'var(--dsw-alias-label-primary, #e8eaf2)',
+          fontSize: '13px', fontFamily: 'inherit',
+        })
+        btn.addEventListener('mouseenter', () => {
+          btn.style.background = 'var(--dsw-alias-interactive-bg-hover, rgba(255,255,255,0.08))'
+        })
+        btn.addEventListener('mouseleave', () => {
+          btn.style.background = 'transparent'
+        })
+      }
+      actions.appendChild(change)
+      actions.appendChild(clear)
+      row.appendChild(label)
+      row.appendChild(actions)
+      return row
+    }
+    function apply() {
+      const dialog = document.querySelector('[role="dialog"]')
+      if (!dialog || !isGeneralActive(dialog)) return
+      const container = sectionContainer(dialog)
+      if (!container || container.querySelector('#' + ROW_ID)) return
+      container.prepend(makeRow())
+    }
+    const observer = new MutationObserver(apply)
+    observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['aria-current'] })
+    window.__dshWallpaperObserver = observer
+    apply()
+  })()`
+  mainWindow.webContents.executeJavaScript(script).catch(() => {})
+}
+
+function injectBalanceButton() {
+  if (mainWindow === null || mainWindow.isDestroyed()) return
+  const script = `(() => {
+    if (document.getElementById('dsh-balance-btn')) return
     if (!window.dshDesktop) return
     const btn = document.createElement('button')
-    btn.id = 'dsh-wallpaper-btn'
+    btn.id = 'dsh-balance-btn'
     btn.type = 'button'
-    btn.innerHTML = '<span style="font-size:14px;line-height:1">🖼</span><span>更换背景</span>'
-    btn.title = '选择一张图片作为背景'
+    btn.innerHTML = '<span style="font-size:14px;line-height:1">💳</span><span id="dsh-balance-label">余额</span>'
+    btn.title = '点击查看各模型 API 余额'
     Object.assign(btn.style, {
       position: 'fixed', left: '16px', bottom: '76px', zIndex: '2147483000',
       display: 'inline-flex', alignItems: 'center', gap: '8px',
@@ -309,65 +464,77 @@ function injectWallpaperButton() {
       btn.style.background = 'rgba(18,22,36,0.78)'
       btn.style.boxShadow = '0 4px 16px rgba(0,0,0,0.35)'
     })
-    btn.addEventListener('click', () => { void window.dshDesktop.changeBackground() })
-    document.body.appendChild(btn)
-  })()`
-  mainWindow.webContents.executeJavaScript(script).catch(() => {})
-}
-
-function injectBalanceButton() {
-  if (mainWindow === null || mainWindow.isDestroyed()) return
-  const script = `(() => {
-    if (document.getElementById('dsh-balance-btn')) return
-    if (!window.dshDesktop) return
-    const btn = document.createElement('button')
-    btn.id = 'dsh-balance-btn'
-    btn.type = 'button'
-    btn.innerHTML = '<span style="font-size:14px;line-height:1">💳</span><span id="dsh-balance-label">余额：查询中…</span>'
-    btn.title = '点击刷新 API 余额'
-    Object.assign(btn.style, {
-      position: 'fixed', left: '16px', bottom: '132px', zIndex: '2147483000',
-      display: 'inline-flex', alignItems: 'center', gap: '8px',
-      padding: '10px 16px', borderRadius: '999px', border: '1px solid rgba(255,255,255,0.14)',
-      cursor: 'pointer', background: 'rgba(18,22,36,0.78)', color: '#e8eaf2',
-      fontSize: '13px', fontFamily: 'inherit', boxShadow: '0 4px 16px rgba(0,0,0,0.35)',
-      backdropFilter: 'blur(10px)', transition: 'transform .15s ease, background .15s ease, box-shadow .15s ease',
+    const panel = document.createElement('div')
+    panel.id = 'dsh-balance-panel'
+    Object.assign(panel.style, {
+      position: 'fixed', left: '16px', bottom: '128px', zIndex: '2147483000',
+      minWidth: '240px', display: 'none', flexDirection: 'column', gap: '6px',
+      padding: '12px 14px', borderRadius: '14px', border: '1px solid rgba(255,255,255,0.14)',
+      background: 'rgba(18,22,36,0.92)', color: '#e8eaf2',
+      fontSize: '13px', fontFamily: 'inherit', boxShadow: '0 10px 30px rgba(0,0,0,0.45)',
+      backdropFilter: 'blur(14px)',
     })
-    btn.addEventListener('mouseenter', () => {
-      btn.style.transform = 'translateY(-2px)'
-      btn.style.background = 'rgba(30,36,58,0.9)'
-      btn.style.boxShadow = '0 6px 20px rgba(0,0,0,0.45)'
+    const title = document.createElement('div')
+    title.textContent = '模型 API 余额'
+    Object.assign(title.style, {
+      fontSize: '12px', fontWeight: '600', color: '#9aa3bf',
+      marginBottom: '2px', letterSpacing: '.3px',
     })
-    btn.addEventListener('mouseleave', () => {
-      btn.style.transform = 'translateY(0)'
-      btn.style.background = 'rgba(18,22,36,0.78)'
-      btn.style.boxShadow = '0 4px 16px rgba(0,0,0,0.35)'
-    })
-    const label = () => document.getElementById('dsh-balance-label')
+    panel.appendChild(title)
+    const list = document.createElement('div')
+    list.id = 'dsh-balance-list'
+    Object.assign(list.style, { display: 'flex', flexDirection: 'column', gap: '8px' })
+    panel.appendChild(list)
+    const footer = document.createElement('div')
+    footer.id = 'dsh-balance-updated'
+    Object.assign(footer.style, { fontSize: '11px', color: '#7c869f', marginTop: '2px' })
+    panel.appendChild(footer)
+    document.body.appendChild(panel)
+    let open = false
+    function toggle() {
+      open = !open
+      panel.style.display = open ? 'flex' : 'none'
+      if (open) void refresh()
+    }
+    function rowHtml(provider) {
+      const name = document.createElement('div')
+      name.textContent = provider.label
+      name.style.cssText = 'min-width:84px;color:#c7cede'
+      const value = document.createElement('div')
+      if (provider.ok) {
+        value.textContent = provider.balance + ' ' + provider.currency
+        value.style.color = '#7c93ff'
+        if (provider.note) {
+          value.title = provider.note
+        }
+      } else if (provider.reason === 'no-key') {
+        value.textContent = '未配置'
+        value.style.color = '#7c869f'
+      } else {
+        value.textContent = '获取失败'
+        value.style.color = '#e07070'
+      }
+      value.style.cssText = 'text-align:right;font-weight:600;flex:1'
+      const row = document.createElement('div')
+      row.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:10px'
+      row.appendChild(name)
+      row.appendChild(value)
+      return row
+    }
     async function refresh() {
-      const el = label()
-      if (el) el.textContent = '余额：查询中…'
+      list.textContent = '查询中…'
       const result = await window.dshDesktop.getBalance()
-      const current = label()
-      if (!current) return
-      if (!result.ok) {
-        current.textContent = result.reason === 'no-key'
-          ? '余额：未配置 API Key'
-          : result.reason === 'http'
-            ? '余额：获取失败 (' + result.status + ')'
-            : '余额：网络错误'
+      if (!Array.isArray(result)) {
+        list.textContent = '查询失败'
         return
       }
-      const info = Array.isArray(result.data?.balance_infos) ? result.data.balance_infos[0] : undefined
-      const currency = info?.currency ?? 'CNY'
-      const total = info?.total_balance ?? '0.00'
-      const available = result.data?.is_available === false ? '（不可用）' : ''
-      current.textContent = '余额：' + total + ' ' + currency + available
+      list.textContent = ''
+      for (const provider of result) list.appendChild(rowHtml(provider))
+      footer.textContent = '更新于 ' + new Date().toLocaleTimeString()
     }
-    btn.addEventListener('click', () => { void refresh() })
+    btn.addEventListener('click', toggle)
     document.body.appendChild(btn)
-    void refresh()
-    setInterval(() => { void refresh() }, ${BALANCE_REFRESH_MS})
+    setInterval(() => { if (open) void refresh() }, ${BALANCE_REFRESH_MS})
   })()`
   mainWindow.webContents.executeJavaScript(script).catch(() => {})
 }
@@ -586,7 +753,7 @@ async function createMainWindow() {
   mainWindow.on('move', queueSave)
   mainWindow.webContents.on('did-finish-load', () => {
     void applyWallpaper()
-    injectWallpaperButton()
+    injectSettingsWallpaperEntry()
     injectBalanceButton()
   })
   await mainWindow.loadURL(SERVER_URL)
