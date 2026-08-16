@@ -532,11 +532,24 @@ function injectBalanceButton() {
       name.textContent = provider.label
       name.style.cssText = 'min-width:84px;color:#c7cede'
       const value = document.createElement('div')
-      value.textContent = provider.balance + ' ' + provider.currency
-      if (provider.note) {
-        value.title = provider.note
+      let color = '#7c869f'
+      if (provider.ok) {
+        value.textContent = provider.balance + ' ' + provider.currency
+        color = '#7c93ff'
+        if (provider.note) {
+          value.title = provider.note
+        }
+      } else if (provider.reason === 'no-key') {
+        value.textContent = '未配置'
+      } else if (provider.reason === 'no-admin') {
+        value.textContent = '需管理密钥'
+        color = '#d9a45b'
+        value.title = 'Claude 需使用 sk-ant-admin 开头的管理密钥'
+      } else {
+        value.textContent = '获取失败'
+        color = '#e07070'
       }
-      value.style.cssText = 'text-align:right;font-weight:600;flex:1;color:#7c93ff'
+      value.style.cssText = 'text-align:right;font-weight:600;flex:1;color:' + color
       const row = document.createElement('div')
       row.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:10px'
       row.appendChild(name)
@@ -551,14 +564,13 @@ function injectBalanceButton() {
         return
       }
       list.textContent = ''
-      const visible = result.filter((provider) => provider.ok)
-      if (visible.length === 0) {
+      if (result.length === 0) {
         const empty = document.createElement('div')
         empty.textContent = '暂无可用余额信息'
         empty.style.color = '#7c869f'
         list.appendChild(empty)
       }
-      for (const provider of visible) list.appendChild(rowHtml(provider))
+      for (const provider of result) list.appendChild(rowHtml(provider))
       footer.textContent = '更新于 ' + new Date().toLocaleTimeString()
     }
     btn.addEventListener('click', toggle)
