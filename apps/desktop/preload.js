@@ -9,4 +9,5 @@ contextBridge.exposeInMainWorld('dshDesktop', {
   changeBackground: () => ipcRenderer.invoke('desktop:change-background'),
   clearBackground: () => ipcRenderer.invoke('desktop:clear-background'),
   getBalance: () => ipcRenderer.invoke('desktop:get-balance'),
+  openWorkspaceFolder: (workspaceTitle) => ipcRenderer.invoke('desktop:open-workspace-folder', workspaceTitle),
 })

@@ -45,6 +45,7 @@ let splashWindow = null
 let mainWindow = null
 let harnessProcess = null
 let harnessLog = ''
+let isQuitting = false
 
 function logDir() {
   const dir = app.getPath('userData')
@@ -387,6 +388,34 @@ async function fetchApiBalance() {
 }
 
 /**
+ * Resolve the current workspace folder from the harness workspace store
+ * ($DSH_HOME/storages/workspace.json) and reveal it in the file explorer,
+ * mirroring the desktop-client "Open in" action. The renderer passes the
+ * visible workspace title (from the "选择工作区" chip) so the right
+ * workspace wins when several are registered.
+ */
+async function openWorkspaceFolder(workspaceTitle) {
+  const home = process.env.DSH_HOME ?? join(homedir(), '.dsh')
+  const file = join(home, 'storages', 'workspace.json')
+  try {
+    const data = JSON.parse(readFileSync(file, 'utf8'))
+    const table = data?.tables?.workspaces ?? {}
+    const ids = Array.isArray(data?.global?.workspaceIds) ? data.global.workspaceIds : []
+    const ordered = ids.map((id) => table[id]).filter((w) => w && typeof w.path === 'string')
+    const title = typeof workspaceTitle === 'string' && workspaceTitle.length > 0 ? workspaceTitle : undefined
+    const target = title !== undefined ? ordered.find((w) => w.title === title) : undefined
+    const workspace = target ?? ordered[0]
+    if (workspace !== undefined) {
+      const error = await shell.openPath(workspace.path)
+      return error === '' ? { ok: true } : { ok: false, reason: error }
+    }
+  } catch (error) {
+    recordCrash(`open workspace folder failed: ${error?.message ?? error}`)
+  }
+  return { ok: false }
+}
+
+/**
  * Inject the wallpaper entry into the settings panel's General section. The
  * panel is a React modal that remounts its content per open and per section
  * switch, so a MutationObserver re-applies the row whenever the General
@@ -478,7 +507,7 @@ function injectBalanceButton() {
     btn.innerHTML = '<span style="font-size:14px;line-height:1">💳</span><span id="dsh-balance-label">余额</span>'
     btn.title = '点击查看各模型 API 余额'
     Object.assign(btn.style, {
-      position: 'fixed', left: '16px', bottom: '76px', zIndex: '2147483000',
+      position: 'fixed', left: '16px', bottom: '124px', zIndex: '2147483000',
       display: 'inline-flex', alignItems: 'center', gap: '8px',
       padding: '10px 16px', borderRadius: '999px', border: '1px solid rgba(255,255,255,0.14)',
       cursor: 'pointer', background: 'rgba(18,22,36,0.78)', color: '#e8eaf2',
@@ -498,7 +527,7 @@ function injectBalanceButton() {
     const panel = document.createElement('div')
     panel.id = 'dsh-balance-panel'
     Object.assign(panel.style, {
-      position: 'fixed', left: '16px', bottom: '128px', zIndex: '2147483000',
+      position: 'fixed', left: '16px', bottom: '176px', zIndex: '2147483000',
       minWidth: '240px', display: 'none', flexDirection: 'column', gap: '6px',
       padding: '12px 14px', borderRadius: '14px', border: '1px solid rgba(255,255,255,0.14)',
       background: 'rgba(18,22,36,0.92)', color: '#e8eaf2',
@@ -576,6 +605,42 @@ function injectBalanceButton() {
     btn.addEventListener('click', toggle)
     document.body.appendChild(btn)
     setInterval(() => { if (open) void refresh() }, ${BALANCE_REFRESH_MS})
+  })()`
+  mainWindow.webContents.executeJavaScript(script).catch(() => {})
+}
+
+function injectWorkspaceFolderButton() {
+  if (mainWindow === null || mainWindow.isDestroyed()) return
+  const script = `(() => {
+    if (document.getElementById('dsh-open-folder-btn')) return
+    if (!window.dshDesktop) return
+    const btn = document.createElement('button')
+    btn.id = 'dsh-open-folder-btn'
+    btn.type = 'button'
+    btn.innerHTML = '<span style="font-size:14px;line-height:1">📂</span><span>打开文件夹</span>'
+    btn.title = '打开当前工作区文件夹'
+    Object.assign(btn.style, {
+      position: 'fixed', left: '16px', bottom: '76px', zIndex: '2147483000',
+      display: 'inline-flex', alignItems: 'center', gap: '8px',
+      padding: '10px 16px', borderRadius: '999px', border: '1px solid rgba(255,255,255,0.14)',
+      cursor: 'pointer', background: 'rgba(18,22,36,0.78)', color: '#e8eaf2',
+      fontSize: '13px', fontFamily: 'inherit', boxShadow: '0 4px 16px rgba(0,0,0,0.35)',
+      backdropFilter: 'blur(10px)', transition: 'transform .15s ease, background .15s ease',
+    })
+    btn.addEventListener('mouseenter', () => {
+      btn.style.transform = 'translateY(-2px)'
+      btn.style.background = 'rgba(30,36,58,0.9)'
+    })
+    btn.addEventListener('mouseleave', () => {
+      btn.style.transform = 'translateY(0)'
+      btn.style.background = 'rgba(18,22,36,0.78)'
+    })
+    btn.addEventListener('click', () => {
+      const chip = document.querySelector('[aria-label="选择工作区"]')
+      const title = chip ? chip.textContent.trim() : ''
+      void window.dshDesktop.openWorkspaceFolder(title)
+    })
+    document.body.appendChild(btn)
   })()`
   mainWindow.webContents.executeJavaScript(script).catch(() => {})
 }
@@ -795,7 +860,17 @@ async function createMainWindow() {
   mainWindow.webContents.on('did-finish-load', () => {
     void applyWallpaper()
     injectSettingsWallpaperEntry()
+    injectWorkspaceFolderButton()
     injectBalanceButton()
+  })
+  // Match the Codex desktop client: closing the window keeps the process
+  // alive and parked on the taskbar instead of quitting. The 文件 → 退出
+  // menu item (and app.quit() from anywhere else) still exits for real.
+  mainWindow.on('close', (event) => {
+    if (!isQuitting) {
+      event.preventDefault()
+      mainWindow?.minimize()
+    }
   })
   await mainWindow.loadURL(SERVER_URL)
   showMain()
@@ -840,6 +915,7 @@ if (!gotLock) {
   ipcMain.handle('desktop:change-background', () => changeWallpaper())
   ipcMain.handle('desktop:clear-background', () => clearWallpaper())
   ipcMain.handle('desktop:get-balance', () => fetchApiBalance())
+  ipcMain.handle('desktop:open-workspace-folder', (_event, workspaceTitle) => openWorkspaceFolder(workspaceTitle))
   app.on('second-instance', () => {
     if (mainWindow !== null) {
       if (mainWindow.isMinimized()) mainWindow.restore()
@@ -891,6 +967,10 @@ if (!gotLock) {
 
 app.on('window-all-closed', () => {
   app.quit()
+})
+
+app.on('before-quit', () => {
+  isQuitting = true
 })
 
 app.on('will-quit', () => {
