@@ -1,17 +1,18 @@
 # DeepSeek Harness 桌面版（Windows 客户端）
 
-这是 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 的 Windows 桌面客户端封装：用 Electron 把 Harness 的 Web UI 包成本地应用，内置运行环境，**安装即可用，无需单独安装 Node.js**。
+因dsh本身不支持客户端版，故本项目制作一款 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 的 Windows 桌面客户端：用 Electron 把 Harness 的 Web UI 包成本地应用，内置运行环境，
+**安装即可用，无需单独安装 Node.js**。
 
 > 底层 Harness 仍为官方 MIT 开源项目，本仓库在其基础上增加了桌面客户端封装（`apps/desktop/`）与打包流水线（`scripts/pack-desktop-client.mjs`）。
 
 ## 下载
 
-到本仓库的 [Releases](https://gitcode.com/qq_57094995/deepseek-harness-desktop/releases) 页面下载：
+到本仓库的 [Releases](https://github.com/new-bee-666/deepseek-harness-desktop/releases) 页面下载：
 
 | 文件 | 说明 |
 |---|---|
-| `DeepSeek Harness Setup 0.1.0-rc.5.exe` | 安装版：可选安装目录，创建桌面快捷方式 |
-| `DeepSeek Harness 0.1.0-rc.5.exe` | 便携版：免安装，双击即用 |
+| `DeepSeek Harness Setup 0.3.0.exe` | 安装版：可选安装目录，创建桌面快捷方式 |
+| `DeepSeek Harness 0.3.0.exe` | 便携版：免安装，双击即用 |
 
 ## 使用注意事项
 
@@ -22,9 +23,8 @@
 
 ### 配置 API Key（必须）
 
-- 客户端本身不带模型密钥，首次使用需要配置 DeepSeek API Key。
+- 客户端本身不带模型密钥，首次使用需要配置 DeepSeek API Key或者可支持模型的Key。
 - 在设置页面填入，或手动编辑 `C:\Users\你的用户名\.dsh\.credentials.yaml`。
-- **API Key 只保存在你的用户目录，不会写入仓库、不会打包进 exe，也不会随程序分发。**
 
 ### 网络与端口
 
@@ -34,12 +34,22 @@
 ### 更换背景
 
 - 左下角有“更换背景”按钮，支持自定义本地图片作为对话背景。
-- 更换后背景只保存在本机，不随对话内容上传。
 
 ### 卸载/清理
 
 - 安装版：通过系统“添加或删除程序”卸载即可。
 - 便携版：删除 exe 后，如需彻底清理，删除 `%LOCALAPPDATA%\DeepSeek Harness` 目录。
+
+### 新添加个性化功能
+- v0.1版本左下角有“更换背景”按钮，支持自定义本地图片作为对话背景。
+- v0.2版本新增api余额显示功能（暂时只支持deepseek api余额显示）
+- v0.3.0版本更新
+  - 对话界面左下角余额按钮新增多款大模型余额查询接口：
+  - 对话界面左下角新增 📂 打开文件夹 按钮。点击后用资源管理器打开当前工作区文件夹方便查看
+  - 保活进程-关闭窗口后驻留系统托盘
+  - 更换背景入口移入 **设置 → 通用设置**（“选择图片…”/“清除背景”），对话界面只保留余额显示。
+
+
 
 ## 从源码构建
 
